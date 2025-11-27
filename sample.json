@@ -1,0 +1,64 @@
+[
+  {
+    "id": 1,
+    "name": "张大妞",
+    "age": 28,
+    "email": "zhangsan@example.com",
+    "active": true,
+    "salary": 50000,
+    "department": "Engineering",
+    "address": {
+      "city": "Beijing",
+      "country": "China"
+    }
+  },
+  {
+    "id": 2,
+    "name": "李四",
+    "age": 32,
+    "email": "lisi@example.com",
+    "active": true,
+    "salary": 60000,
+    "department": "Marketing",
+    "address": {
+      "city": "Shanghai",
+      "country": "China"
+    }
+  },
+  {
+    "id": 3,
+    "name": "王五",
+    "age": 25,
+    "email": "wangwu@example.com",
+    "active": false,
+    "salary": 45000,
+    "department": "Sales",
+    "address": {
+      "city": "Guangzhou",
+      "country": "China"
+    }
+  },
+  {
+    "id": 4,
+    "name": "赵六",
+    "age": 35,
+    "email": "zhaoliu@example.com",
+    "active": true,
+    "salary": 75000,
+    "department": "Engineering",
+    "address": {
+      "city": "Shenzhen",
+      "country": "China"
+    }
+  },
+  {
+    "id": 5,
+    "name": "钱七",
+    "age": 29,
+    "email": "qianqi@example.com",
+    "active": true,
+    "salary": 55000,
+    "department": "HR",
+    "address": null
+  }
+]
