@@ -1,9 +1,13 @@
 {
-  "name": "json-table-viewer",
-  "displayName": "JSON Table Viewer",
+  "name": "simple-json-table-editor",
+  "displayName": "Simple JSON Table Editor",
   "description": "View JSON data as interactive table with light/dark theme support",
   "version": "0.0.1",
-  "publisher": "your-publisher-name",
+  "publisher": "LucasYou",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/curiositycigar/json-table-editor.git"
+  },
   "icon": "",
   "engines": {
     "vscode": "^1.106.1"
@@ -24,13 +28,13 @@
   "contributes": {
     "commands": [
       {
-        "command": "json-table-viewer.viewAsTable",
+        "command": "simple-json-table-editor.viewAsTable",
         "title": "View as Table",
         "category": "JSON Table Viewer",
         "icon": "$(table)"
       },
       {
-        "command": "json-table-viewer.viewSelectionAsTable",
+        "command": "simple-json-table-editor.viewSelectionAsTable",
         "title": "View Selection as Table",
         "category": "JSON Table Viewer"
       }
@@ -39,29 +43,29 @@
       "editor/context": [
         {
           "when": "resourceLangId == json || resourceLangId == jsonc",
-          "command": "json-table-viewer.viewAsTable",
+          "command": "simple-json-table-editor.viewAsTable",
           "group": "navigation@1"
         },
         {
           "when": "editorHasSelection && (resourceLangId == json || resourceLangId == jsonc)",
-          "command": "json-table-viewer.viewSelectionAsTable",
+          "command": "simple-json-table-editor.viewSelectionAsTable",
           "group": "navigation@2"
         }
       ],
       "editor/title": [
         {
           "when": "resourceLangId == json || resourceLangId == jsonc",
-          "command": "json-table-viewer.viewAsTable",
+          "command": "simple-json-table-editor.viewAsTable",
           "group": "navigation"
         }
       ],
       "commandPalette": [
         {
-          "command": "json-table-viewer.viewAsTable",
+          "command": "simple-json-table-editor.viewAsTable",
           "when": "resourceLangId == json || resourceLangId == jsonc"
         },
         {
-          "command": "json-table-viewer.viewSelectionAsTable",
+          "command": "simple-json-table-editor.viewSelectionAsTable",
           "when": "editorHasSelection"
         }
       ]

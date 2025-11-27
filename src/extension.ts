@@ -4,7 +4,7 @@ export function activate(context: vscode.ExtensionContext) {
 	console.log('JSON Table Viewer extension is now active!');
 
 	// Register command to view JSON as table
-	const viewAsTableCommand = vscode.commands.registerCommand('json-table-viewer.viewAsTable', () => {
+	const viewAsTableCommand = vscode.commands.registerCommand('simple-json-table-editor.viewAsTable', () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
 			vscode.window.showErrorMessage('No active editor found');
@@ -27,7 +27,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// Register command to view selected JSON as table
-	const viewSelectionAsTableCommand = vscode.commands.registerCommand('json-table-viewer.viewSelectionAsTable', () => {
+	const viewSelectionAsTableCommand = vscode.commands.registerCommand('simple-json-table-editor.viewSelectionAsTable', () => {
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) {
 			vscode.window.showErrorMessage('No active editor found');
@@ -497,6 +497,99 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			text-align: center;
 			width: 80px;
 		}
+
+		/* Modal styles */
+		.modal-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background-color: rgba(0, 0, 0, 0.7);
+			display: none;
+			align-items: center;
+			justify-content: center;
+			z-index: 10000;
+		}
+
+		.modal-overlay.active {
+			display: flex;
+		}
+
+		.modal-content {
+			background-color: var(--vscode-editor-background);
+			border: 1px solid var(--vscode-panel-border);
+			border-radius: 6px;
+			max-width: 90%;
+			max-height: 80%;
+			overflow: auto;
+			padding: 20px;
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+		}
+
+		.modal-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 15px;
+			padding-bottom: 10px;
+			border-bottom: 1px solid var(--vscode-panel-border);
+		}
+
+		.modal-title {
+			font-size: 1.2em;
+			font-weight: 600;
+			color: var(--vscode-foreground);
+		}
+
+		.modal-close {
+			background: none;
+			border: none;
+			font-size: 1.5em;
+			cursor: pointer;
+			color: var(--vscode-foreground);
+			padding: 0;
+			width: 30px;
+			height: 30px;
+		}
+
+		.modal-close:hover {
+			background-color: var(--vscode-list-hoverBackground);
+			border-radius: 3px;
+		}
+
+		.modal-body {
+			min-width: 500px;
+		}
+
+		.modal-footer {
+			margin-top: 15px;
+			padding-top: 10px;
+			border-top: 1px solid var(--vscode-panel-border);
+			display: flex;
+			justify-content: flex-end;
+			gap: 10px;
+		}
+
+		.nested-table {
+			width: 100%;
+			margin-top: 10px;
+		}
+
+		.nested-table td {
+			padding: 8px 10px;
+		}
+
+		.object-edit-icon {
+			cursor: pointer;
+			margin-left: 8px;
+			color: var(--vscode-textLink-foreground);
+			opacity: 0.7;
+		}
+
+		.object-edit-icon:hover {
+			opacity: 1;
+		}
 	</style>
 </head>
 <body>
@@ -514,6 +607,21 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 		</div>
 
 		${tableHtml}
+	</div>
+
+	<!-- Modal for nested object editing -->
+	<div class="modal-overlay" id="nestedModal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<div class="modal-title" id="modalTitle">Edit Nested Object</div>
+				<button class="modal-close" onclick="closeNestedModal()">&times;</button>
+			</div>
+			<div class="modal-body" id="modalBody"></div>
+			<div class="modal-footer">
+				<button onclick="closeNestedModal()">Cancel</button>
+				<button onclick="saveNestedObject()" style="background-color: var(--vscode-button-background); color: var(--vscode-button-foreground);">Save</button>
+			</div>
+		</div>
 	</div>
 
 	<script>
@@ -576,10 +684,23 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 
 		// Edit cell functionality
 		let editingCell = null;
+		let currentNestedData = null;
+		let currentNestedContext = null;
 
 		document.addEventListener('click', function(e) {
+			// Check if clicking the nested edit icon
+			if (e.target.classList.contains('object-edit-icon')) {
+				e.preventDefault();
+				e.stopPropagation();
+				const cell = e.target.closest('.editable-cell');
+				if (cell) {
+					openNestedEditor(cell);
+				}
+				return;
+			}
+
 			const cell = e.target.closest('.editable-cell');
-			if (cell && !cell.querySelector('input')) {
+			if (cell && !cell.querySelector('input') && !cell.querySelector('textarea')) {
 				startEdit(cell);
 			}
 		});
@@ -592,9 +713,17 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			const columnKey = cell.dataset.column;
 			const currentValue = cell.dataset.value || cell.textContent.trim();
 
-			const input = document.createElement('input');
-			input.type = 'text';
+			// Check if it's a JSON object
+			const isJsonObject = currentValue.startsWith('{') || currentValue.startsWith('[');
+
+			const input = document.createElement(isJsonObject ? 'textarea' : 'input');
+			if (!isJsonObject) {
+				input.type = 'text';
+			}
 			input.value = currentValue;
+			if (isJsonObject) {
+				input.style.cssText = 'width:100%;min-height:80px;font-family:monospace;background:var(--vscode-input-background);color:var(--vscode-input-foreground);border:1px solid var(--vscode-input-border);';
+			}
 
 			cell.textContent = '';
 			cell.appendChild(input);
@@ -602,7 +731,23 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			input.select();
 
 			const finishEdit = () => {
-				const newValue = input.value;
+				let newValue = input.value.trim();
+
+				// Validate JSON if it looks like an object
+				if (newValue.startsWith('{') || newValue.startsWith('[')) {
+					try {
+						JSON.parse(newValue);
+					} catch (e) {
+						const notification = document.createElement('div');
+						notification.textContent = '✗ Invalid JSON: ' + e.message;
+						notification.style.cssText = 'position:fixed;top:10px;right:10px;background:var(--vscode-errorBackground);color:var(--vscode-errorForeground);padding:8px 12px;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:9999;';
+						document.body.appendChild(notification);
+						setTimeout(() => notification.remove(), 3000);
+						input.focus();
+						return;
+					}
+				}
+
 				if (newValue !== currentValue) {
 					vscode.postMessage({
 						command: 'updateCell',
@@ -610,23 +755,174 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 						columnKey: columnKey,
 						newValue: newValue
 					});
-					cell.innerHTML = formatCellValue(newValue);
+					// Parse and update display based on type
+					let parsedValue;
+					try {
+						parsedValue = JSON.parse(newValue);
+					} catch {
+						parsedValue = newValue;
+					}
+					cell.innerHTML = formatCellValue(parsedValue);
 					cell.dataset.value = newValue;
 				} else {
-					cell.innerHTML = formatCellValue(currentValue);
+					let parsedValue;
+					try {
+						parsedValue = JSON.parse(currentValue);
+					} catch {
+						parsedValue = currentValue;
+					}
+					cell.innerHTML = formatCellValue(parsedValue);
 				}
 				editingCell = null;
 			};
 
 			input.addEventListener('blur', finishEdit);
 			input.addEventListener('keydown', (e) => {
-				if (e.key === 'Enter') {
+				if (e.key === 'Enter' && !isJsonObject) {
 					finishEdit();
 				} else if (e.key === 'Escape') {
 					cell.textContent = currentValue;
 					editingCell = null;
 				}
 			});
+		}
+
+		function openNestedEditor(cell) {
+			const rowIndex = parseInt(cell.dataset.row);
+			const columnKey = cell.dataset.column;
+			const currentValue = cell.dataset.value;
+
+			try {
+				const nestedData = JSON.parse(currentValue);
+				currentNestedData = nestedData;
+				currentNestedContext = { rowIndex, columnKey, cell };
+
+				const modal = document.getElementById('nestedModal');
+				const modalTitle = document.getElementById('modalTitle');
+				const modalBody = document.getElementById('modalBody');
+
+				modalTitle.textContent = 'Edit ' + columnKey;
+
+				// Generate table for nested data
+				if (Array.isArray(nestedData)) {
+					modalBody.innerHTML = generateNestedArrayTable(nestedData);
+				} else if (typeof nestedData === 'object' && nestedData !== null) {
+					modalBody.innerHTML = generateNestedObjectTable(nestedData);
+				} else {
+					modalBody.innerHTML = '<p>Cannot display as table</p>';
+				}
+
+				modal.classList.add('active');
+			} catch (e) {
+				alert('Failed to parse nested object: ' + e.message);
+			}
+		}
+
+		window.closeNestedModal = function() {
+			const modal = document.getElementById('nestedModal');
+			modal.classList.remove('active');
+			currentNestedData = null;
+			currentNestedContext = null;
+		};
+
+		window.saveNestedObject = function() {
+			if (!currentNestedContext || !currentNestedData) return;
+
+			// Collect updated values from the table
+			const inputs = document.querySelectorAll('#modalBody input');
+			inputs.forEach(input => {
+				const key = input.dataset.key;
+				const index = input.dataset.index;
+				const value = input.value;
+
+				if (Array.isArray(currentNestedData)) {
+					if (index !== undefined) {
+						const idx = parseInt(index);
+						if (typeof currentNestedData[idx] === 'object') {
+							currentNestedData[idx][key] = parseInputValue(value);
+						} else {
+							currentNestedData[idx] = parseInputValue(value);
+						}
+					}
+				} else {
+					currentNestedData[key] = parseInputValue(value);
+				}
+			});
+
+			const newValue = JSON.stringify(currentNestedData);
+			const { rowIndex, columnKey, cell } = currentNestedContext;
+
+			// Send update message
+			vscode.postMessage({
+				command: 'updateCell',
+				rowIndex: rowIndex,
+				columnKey: columnKey,
+				newValue: newValue
+			});
+
+			// Update cell display
+			cell.innerHTML = formatCellValue(currentNestedData);
+			cell.dataset.value = newValue;
+
+			window.closeNestedModal();
+		};
+
+		function parseInputValue(value) {
+			if (value === '' || value === 'null') return null;
+			if (value === 'true') return true;
+			if (value === 'false') return false;
+			if (!isNaN(value) && value.trim() !== '') return Number(value);
+			try {
+				return JSON.parse(value);
+			} catch {
+				return value;
+			}
+		}
+
+		function generateNestedObjectTable(obj) {
+			let html = '<table class=\"nested-table\"><thead><tr><th>Key<\\/th><th>Value<\\/th><\\/tr><\\/thead><tbody>';
+			for (const [key, value] of Object.entries(obj)) {
+				const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+				html += '<tr><td><strong>' + escapeHtmlClient(key) + '<\\/strong><\\/td><td><input type=\"text\" data-key=\"' + escapeHtmlClient(key) + '\" value=\"' + escapeHtmlClient(valueStr) + '\" style=\"width:100%;\" \\/><\\/td><\\/tr>';
+			}
+			html += '<\\/tbody><\\/table>';
+			return html;
+		}
+
+		function generateNestedArrayTable(arr) {
+			if (arr.length === 0) return '<p>Empty array<\\/p>';
+
+			// Check if array contains objects with same structure
+			const firstItem = arr[0];
+			if (typeof firstItem === 'object' && firstItem !== null && !Array.isArray(firstItem)) {
+				const keys = Object.keys(firstItem);
+				let html = '<table class=\"nested-table\"><thead><tr><th>#<\\/th>';
+				keys.forEach(key => {
+					html += '<th>' + escapeHtmlClient(key) + '<\\/th>';
+				});
+				html += '<\\/tr><\\/thead><tbody>';
+
+				arr.forEach((item, index) => {
+					html += '<tr><td>' + (index + 1) + '<\\/td>';
+					keys.forEach(key => {
+						const value = item[key];
+						const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+						html += '<td><input type=\"text\" data-index=\"' + index + '\" data-key=\"' + escapeHtmlClient(key) + '\" value=\"' + escapeHtmlClient(valueStr) + '\" \\/><\\/td>';
+					});
+					html += '<\\/tr>';
+				});
+				html += '<\\/tbody><\\/table>';
+				return html;
+			} else {
+				// Simple array of primitives
+				let html = '<table class=\"nested-table\"><thead><tr><th>Index<\\/th><th>Value<\\/th><\\/tr><\\/thead><tbody>';
+				arr.forEach((value, index) => {
+					const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+					html += '<tr><td>' + index + '<\\/td><td><input type=\"text\" data-index=\"' + index + '\" value=\"' + escapeHtmlClient(valueStr) + '\" style=\"width:100%;\" \\/><\\/td><\\/tr>';
+				});
+				html += '<\\/tbody><\\/table>';
+				return html;
+			}
 		}
 
 		// Event delegation for delete buttons to handle both static and dynamic rows
@@ -766,6 +1062,14 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			if (typeof value === 'boolean') {
 				return '<span class="boolean-value">' + value + '<\\/span>';
 			}
+			if (typeof value === 'object') {
+				const jsonStr = JSON.stringify(value, null, 2);
+				const preview = JSON.stringify(value);
+				const shortPreview = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
+				const isArray = Array.isArray(value);
+				const icon = isArray ? '📋' : '📊';
+				return '<div class="object-value" title="Click icon to edit as table"><span class="expandable">' + escapeHtmlClient(shortPreview) + '<\\/span><span class="object-edit-icon" data-edit-nested="true">' + icon + '<\\/span><div class="expanded-content">' + escapeHtmlClient(jsonStr) + '<\\/div><\\/div>';
+			}
 			return '<span class="string-value">' + escapeHtmlClient(String(value)) + '<\\/span>';
 		}
 
@@ -804,8 +1108,9 @@ function generateTableHtml(data: any[], columns: string[], editable: boolean = f
 
 		columns.forEach(col => {
 			const value = typeof item === 'object' && item !== null ? item[col] : item;
-			if (editable && typeof value !== 'object') {
-				html += `<td class="editable-cell" data-row="${index}" data-column="${col}" data-value="${escapeHtml(String(value || ''))}">${formatValue(value)}</td>`;
+			if (editable) {
+				const dataValue = typeof value === 'object' ? JSON.stringify(value) : String(value || '');
+				html += `<td class="editable-cell" data-row="${index}" data-column="${col}" data-value="${escapeHtml(dataValue)}">${formatValue(value)}</td>`;
 			} else {
 				html += `<td>${formatValue(value)}</td>`;
 			}
@@ -843,9 +1148,13 @@ function formatValue(value: any): string {
 
 	if (type === 'object') {
 		const jsonStr = JSON.stringify(value, null, 2);
-		const preview = JSON.stringify(value).substring(0, 50);
-		return `<div class="object-value">
-			<span class="expandable">${escapeHtml(preview)}${preview.length >= 50 ? '...' : ''}</span>
+		const preview = JSON.stringify(value);
+		const shortPreview = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
+		const isArray = Array.isArray(value);
+		const icon = isArray ? '📋' : '📊';
+		return `<div class="object-value" title="Click icon to edit as table">
+			<span class="expandable">${escapeHtml(shortPreview)}</span>
+			<span class="object-edit-icon" data-edit-nested="true">${icon}</span>
 			<div class="expanded-content">${escapeHtml(jsonStr)}</div>
 		</div>`;
 	}
