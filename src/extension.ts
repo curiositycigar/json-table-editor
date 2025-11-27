@@ -295,6 +295,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 		.container {
 			max-width: 100%;
 			overflow-x: auto;
+			overflow-y: visible;
 		}
 
 		.info {
@@ -317,6 +318,10 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 		}
 
+		tbody, tr {
+			position: relative;
+		}
+
 		thead {
 			background-color: var(--vscode-editor-lineHighlightBackground);
 			position: sticky;
@@ -337,11 +342,24 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			padding: 10px 15px;
 			border-bottom: 1px solid var(--vscode-panel-border);
 			max-width: 500px;
-			overflow: hidden;
-			text-overflow: ellipsis;
+			overflow: visible;
 		}
 
-		tr:hover {
+		.cell-content {
+			word-wrap: break-word;
+			word-break: break-word;
+			white-space: pre-wrap;
+			display: -webkit-box;
+			-webkit-line-clamp: 4;
+			-webkit-box-orient: vertical;
+			overflow: hidden;
+		}
+
+		tr:hover:not(:has(.editing)) {
+			background-color: var(--vscode-list-hoverBackground);
+		}
+
+		tr:has(.editing) {
 			background-color: var(--vscode-list-hoverBackground);
 		}
 
@@ -368,36 +386,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			font-size: 0.9em;
 		}
 
-		.expandable {
-			cursor: pointer;
-			user-select: none;
-		}
 
-		.expandable::before {
-			content: '▶ ';
-			display: inline-block;
-			transition: transform 0.2s;
-		}
-
-		.expandable.expanded::before {
-			transform: rotate(90deg);
-		}
-
-		.expanded-content {
-			display: none;
-			margin-top: 5px;
-			padding: 10px;
-			background-color: var(--vscode-textCodeBlock-background);
-			border-radius: 3px;
-			font-family: monospace;
-			font-size: 0.85em;
-			white-space: pre-wrap;
-			word-break: break-all;
-		}
-
-		.expanded-content.visible {
-			display: block;
-		}
 
 		.row-number {
 			color: var(--vscode-editorLineNumber-foreground);
@@ -460,19 +449,15 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			position: relative;
 		}
 
-		.editable-cell:hover::after {
-			content: '✍️';
-			position: absolute;
-			right: 5px;
-			top: 50%;
-			transform: translateY(-50%);
-			font-size: 0.8em;
-			opacity: 0.6;
-			z-index: 1;
-		}
+
 
 		.editable-cell.editing {
-			z-index: 100;
+			z-index: 1000;
+		}
+
+		tr:has(.editable-cell.editing) {
+			position: relative;
+			z-index: 999;
 		}
 
 		.editable-cell .overlay-input {
@@ -490,6 +475,27 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			font-family: var(--vscode-font-family);
 			font-size: var(--vscode-font-size);
 			z-index: 10;
+		}
+
+		.editable-cell .overlay-textarea {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width: 100%;
+			min-width: 200px;
+			min-height: 100%;
+			padding: 8px;
+			box-sizing: border-box;
+			background-color: var(--vscode-input-background);
+			color: var(--vscode-input-foreground);
+			border: 2px solid var(--vscode-focusBorder);
+			border-radius: 2px;
+			font-family: var(--vscode-font-family);
+			font-size: var(--vscode-font-size);
+			z-index: 1001;
+			resize: vertical;
+			overflow: hidden;
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 		}
 
 		.modal-textarea {
@@ -519,7 +525,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 
 		.actions-column {
 			text-align: center;
-			width: 80px;
+			width: 100px;
 		}
 
 		/* Modal styles */
@@ -604,16 +610,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			padding: 8px 10px;
 		}
 
-		.object-edit-icon {
-			cursor: pointer;
-			margin-left: 8px;
-			color: var(--vscode-textLink-foreground);
-			opacity: 0.7;
-		}
 
-		.object-edit-icon:hover {
-			opacity: 1;
-		}
 	</style>
 </head>
 <body>
@@ -695,16 +692,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			});
 		}
 
-		// Toggle expandable content
-		document.addEventListener('click', function(e) {
-			if (e.target.classList.contains('expandable')) {
-				e.target.classList.toggle('expanded');
-				const content = e.target.nextElementSibling;
-				if (content && content.classList.contains('expanded-content')) {
-					content.classList.toggle('visible');
-				}
-			}
-		});
+
 
 		// Edit cell functionality
 		let editingCell = null;
@@ -712,17 +700,6 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 		let currentNestedContext = null;
 
 		document.addEventListener('click', function(e) {
-			// Check if clicking the nested edit icon
-			if (e.target.classList.contains('object-edit-icon')) {
-				e.preventDefault();
-				e.stopPropagation();
-				const cell = e.target.closest('.editable-cell');
-				if (cell) {
-					openNestedEditor(cell);
-				}
-				return;
-			}
-
 			const cell = e.target.closest('.editable-cell');
 			if (cell && !cell.querySelector('input') && !cell.querySelector('textarea')) {
 				startEdit(cell);
@@ -736,28 +713,54 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			const columnKey = cell.dataset.column;
 			const currentValue = cell.dataset.value || cell.textContent.trim();
 
-			// Check if it's a JSON object - open modal for textarea editing
-			const isJsonObject = currentValue.startsWith('{') || currentValue.startsWith('[');
+		// Check if it's a JSON object - open modal for textarea editing
+		const isJsonObject = currentValue.startsWith('{') || currentValue.startsWith('[');
 
-			if (isJsonObject) {
-				openTextareaModal(cell, rowIndex, columnKey, currentValue);
-				return;
+		if (isJsonObject) {
+			openTextareaModal(cell, rowIndex, columnKey, currentValue);
+			return;
+		}
+
+		// Determine if value is number or boolean (use input), otherwise use textarea
+		let parsedValue;
+		try {
+			parsedValue = JSON.parse(currentValue);
+		} catch {
+			parsedValue = currentValue;
+		}
+
+		const isNumberOrBoolean = typeof parsedValue === 'number' || typeof parsedValue === 'boolean' || currentValue === 'null' || currentValue === '';
+
+		// For numbers/booleans/null, use input; for strings, use textarea
+		editingCell = cell;
+		const input = document.createElement(isNumberOrBoolean ? 'input' : 'textarea');
+		input.className = isNumberOrBoolean ? 'overlay-input' : 'overlay-textarea';
+		input.value = currentValue;
+		if (isNumberOrBoolean && input instanceof HTMLInputElement) {
+			input.type = 'text';
+		}
+
+		// Add editing class to cell for z-index management
+		cell.classList.add('editing');
+
+		// Append input/textarea as overlay (don't clear cell content)
+		cell.appendChild(input);
+
+		// Auto-adjust height based on content (only for textarea)
+		if (!isNumberOrBoolean && input instanceof HTMLTextAreaElement) {
+			function adjustHeight() {
+				input.style.height = 'auto';
+				const cellHeight = cell.offsetHeight;
+				const scrollHeight = input.scrollHeight;
+				input.style.height = Math.max(cellHeight, scrollHeight) + 'px';
 			}
 
-			// For primitive values, use overlay input
-			editingCell = cell;
-			const input = document.createElement('input');
-			input.type = 'text';
-			input.className = 'overlay-input';
-			input.value = currentValue;
+			adjustHeight();
+			input.addEventListener('input', adjustHeight);
+		}
 
-			// Add editing class to cell for z-index management
-			cell.classList.add('editing');
-
-			// Append input as overlay (don't clear cell content)
-			cell.appendChild(input);
-			input.focus();
-			input.select();
+		input.focus();
+		input.select();
 
 			const finishEdit = () => {
 				const newValue = input.value.trim();
@@ -771,40 +774,46 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 						command: 'updateCell',
 						rowIndex: rowIndex,
 						columnKey: columnKey,
-						newValue: newValue
-					});
-					// Parse and update display based on type
-					let parsedValue;
-					try {
-						parsedValue = JSON.parse(newValue);
-					} catch {
-						parsedValue = newValue;
-					}
-					cell.innerHTML = formatCellValue(parsedValue);
-					cell.dataset.value = newValue;
-				} else {
-					let parsedValue;
-					try {
-						parsedValue = JSON.parse(currentValue);
-					} catch {
-						parsedValue = currentValue;
-					}
-					cell.innerHTML = formatCellValue(parsedValue);
+					newValue: newValue
+				});
+				// Parse and update display based on type
+				let parsedValue;
+				try {
+					parsedValue = JSON.parse(newValue);
+				} catch {
+					parsedValue = newValue;
 				}
-				editingCell = null;
-			};
+				cell.innerHTML = '<div class="cell-content">' + formatCellValue(parsedValue) + '<\\/div>';
+				cell.dataset.value = newValue;
+			} else {
+				let parsedValue;
+				try {
+					parsedValue = JSON.parse(currentValue);
+				} catch {
+					parsedValue = currentValue;
+				}
+				cell.innerHTML = '<div class="cell-content">' + formatCellValue(parsedValue) + '<\\/div>';
+			}
+			editingCell = null;
+		};
 
-			input.addEventListener('blur', finishEdit);
-			input.addEventListener('keydown', (e) => {
-				if (e.key === 'Enter') {
-					finishEdit();
-				} else if (e.key === 'Escape') {
-					input.remove();
-					cell.classList.remove('editing');
-					editingCell = null;
-				}
-			});
-		}
+		input.addEventListener('blur', finishEdit);
+		input.addEventListener('keydown', (e) => {
+			// For input (number/boolean): Enter to finish, Escape to cancel
+			// For textarea (string): Ctrl/Cmd+Enter to finish, Escape to cancel
+			if (isNumberOrBoolean && e.key === 'Enter') {
+				e.preventDefault();
+				finishEdit();
+			} else if (!isNumberOrBoolean && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+				e.preventDefault();
+				finishEdit();
+			} else if (e.key === 'Escape') {
+				input.remove();
+				cell.classList.remove('editing');
+				editingCell = null;
+			}
+		});
+	}
 
 		function openTextareaModal(cell, rowIndex, columnKey, currentValue) {
 			const modal = document.getElementById('nestedModal');
@@ -836,36 +845,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			setTimeout(() => textarea.focus(), 100);
 		}
 
-		function openNestedEditor(cell) {
-			const rowIndex = parseInt(cell.dataset.row);
-			const columnKey = cell.dataset.column;
-			const currentValue = cell.dataset.value;
 
-			try {
-				const nestedData = JSON.parse(currentValue);
-				currentNestedData = nestedData;
-				currentNestedContext = { rowIndex, columnKey, cell };
-
-				const modal = document.getElementById('nestedModal');
-				const modalTitle = document.getElementById('modalTitle');
-				const modalBody = document.getElementById('modalBody');
-
-				modalTitle.textContent = 'Edit ' + columnKey;
-
-				// Generate table for nested data
-				if (Array.isArray(nestedData)) {
-					modalBody.innerHTML = generateNestedArrayTable(nestedData);
-				} else if (typeof nestedData === 'object' && nestedData !== null) {
-					modalBody.innerHTML = generateNestedObjectTable(nestedData);
-				} else {
-					modalBody.innerHTML = '<p>Cannot display as table</p>';
-				}
-
-				modal.classList.add('active');
-			} catch (e) {
-				alert('Failed to parse nested object: ' + e.message);
-			}
-		}
 
 		window.closeNestedModal = function() {
 			const modal = document.getElementById('nestedModal');
@@ -898,7 +878,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 				}
 
 				// Update cell
-				cell.innerHTML = formatCellValue(parsedValue);
+				cell.innerHTML = '<div class="cell-content">' + formatCellValue(parsedValue) + '<\\/div>';
 				cell.dataset.value = newValue;
 			} else if (currentNestedData) {
 				// Handle table editing (existing logic)
@@ -920,16 +900,14 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 					} else {
 						currentNestedData[key] = parseInputValue(value);
 					}
-				});
+			});
 
-				newValue = JSON.stringify(currentNestedData);
-				cell.innerHTML = formatCellValue(currentNestedData);
-				cell.dataset.value = newValue;
-			} else {
-				return;
-			}
-
-			// Send update message
+			newValue = JSON.stringify(currentNestedData);
+			cell.innerHTML = '<div class="cell-content">' + formatCellValue(currentNestedData) + '<\\/div>';
+			cell.dataset.value = newValue;
+		} else {
+			return;
+		}			// Send update message
 			vscode.postMessage({
 				command: 'updateCell',
 				rowIndex: rowIndex,
@@ -1066,18 +1044,16 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			rowNumCell.textContent = rowIndex + 1;
 			tr.appendChild(rowNumCell);
 
-			// Data cells
-			columns.forEach(col => {
-				const td = document.createElement('td');
-				td.className = 'editable-cell';
-				td.dataset.row = rowIndex;
-				td.dataset.column = col;
-				td.dataset.value = newRow[col] || '';
-				td.innerHTML = formatCellValue(newRow[col]);
-				tr.appendChild(td);
-			});
-
-			// Actions cell
+		// Data cells
+		columns.forEach(col => {
+			const td = document.createElement('td');
+			td.className = 'editable-cell';
+			td.dataset.row = rowIndex;
+			td.dataset.column = col;
+			td.dataset.value = newRow[col] || '';
+			td.innerHTML = '<div class="cell-content">' + formatCellValue(newRow[col]) + '<\\/div>';
+			tr.appendChild(td);
+		});			// Actions cell
 			const actionsCell = document.createElement('td');
 			actionsCell.className = 'actions-column';
 			const deleteButton = document.createElement('button');
@@ -1136,12 +1112,9 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 				return '<span class="boolean-value">' + value + '<\\/span>';
 			}
 			if (typeof value === 'object') {
-				const jsonStr = JSON.stringify(value, null, 2);
 				const preview = JSON.stringify(value);
 				const shortPreview = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
-				const isArray = Array.isArray(value);
-				const icon = isArray ? '📋' : '📊';
-				return '<div class="object-value" title="Click icon to edit as table"><span class="expandable">' + escapeHtmlClient(shortPreview) + '<\\/span><span class="object-edit-icon" data-edit-nested="true">' + icon + '<\\/span><div class="expanded-content">' + escapeHtmlClient(jsonStr) + '<\\/div><\\/div>';
+				return '<span class="object-value">' + escapeHtmlClient(shortPreview) + '<\\/span>';
 			}
 			return '<span class="string-value">' + escapeHtmlClient(String(value)) + '<\\/span>';
 		}
@@ -1183,9 +1156,9 @@ function generateTableHtml(data: any[], columns: string[], editable: boolean = f
 			const value = typeof item === 'object' && item !== null ? item[col] : item;
 			if (editable) {
 				const dataValue = typeof value === 'object' ? JSON.stringify(value) : String(value || '');
-				html += `<td class="editable-cell" data-row="${index}" data-column="${col}" data-value="${escapeHtml(dataValue)}">${formatValue(value)}</td>`;
+				html += `<td class="editable-cell" data-row="${index}" data-column="${col}" data-value="${escapeHtml(dataValue)}"><div class="cell-content">${formatValue(value)}</div></td>`;
 			} else {
-				html += `<td>${formatValue(value)}</td>`;
+				html += `<td><div class="cell-content">${formatValue(value)}</div></td>`;
 			}
 		});
 
@@ -1220,16 +1193,9 @@ function formatValue(value: any): string {
 	}
 
 	if (type === 'object') {
-		const jsonStr = JSON.stringify(value, null, 2);
 		const preview = JSON.stringify(value);
 		const shortPreview = preview.length > 50 ? preview.substring(0, 50) + '...' : preview;
-		const isArray = Array.isArray(value);
-		const icon = isArray ? '📋' : '📊';
-		return `<div class="object-value" title="Click icon to edit as table">
-			<span class="expandable">${escapeHtml(shortPreview)}</span>
-			<span class="object-edit-icon" data-edit-nested="true">${icon}</span>
-			<div class="expanded-content">${escapeHtml(jsonStr)}</div>
-		</div>`;
+		return `<span class="object-value">${escapeHtml(shortPreview)}</span>`;
 	}
 
 	return escapeHtml(String(value));

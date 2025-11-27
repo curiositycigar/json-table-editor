@@ -2,7 +2,7 @@
 
 All notable changes to the "Simple JSON Table Editor" extension.
 
-## [0.0.4] - 2025-11-27
+## [0.0.5] - 2025-11-27
 
 ### Changed
 - Optimized editing UI: overlay input mode prevents UI jumping
@@ -16,6 +16,7 @@ All notable changes to the "Simple JSON Table Editor" extension.
 - Type-aware value coloring
 - Auto-save and JSON validation
 
+## [0.0.4] - 2025-11-27
 ## [0.0.1] - 2025-11-27
 
 - Initial release
