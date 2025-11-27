@@ -82,12 +82,15 @@ function showJsonTable(context: vscode.ExtensionContext, jsonData: any, title: s
 					const { rowIndex, columnKey, newValue } = message;
 					try {
 						// Update the data
+						let updatedValue: any;
 						if (isArray && Array.isArray(currentData)) {
 							if (currentData[rowIndex] && typeof currentData[rowIndex] === 'object') {
 								currentData[rowIndex][columnKey] = parseValue(newValue);
+								updatedValue = currentData[rowIndex][columnKey];
 							}
 						} else if (typeof currentData === 'object') {
 							currentData[columnKey] = parseValue(newValue);
+							updatedValue = currentData[columnKey];
 						}
 
 						// Write back to file
@@ -106,9 +109,8 @@ function showJsonTable(context: vscode.ExtensionContext, jsonData: any, title: s
 								command: 'updateSuccess',
 								rowIndex,
 								columnKey,
-								value: currentData[rowIndex][columnKey]
+								value: updatedValue
 							});
-							vscode.window.showInformationMessage('Changes saved successfully');
 						} else {
 							vscode.window.showErrorMessage('Failed to save changes');
 							panel.webview.postMessage({ command: 'updateFailed' });
@@ -143,20 +145,41 @@ function showJsonTable(context: vscode.ExtensionContext, jsonData: any, title: s
 							edit.replace(documentUri, fullRange, jsonString);
 							const success = await vscode.workspace.applyEdit(edit);
 
-						if (success) {
-							await vscode.workspace.saveAll();
-							// Send new row data instead of refreshing entire page
-							panel.webview.postMessage({
-								command: 'rowAdded',
-								newRow: newRow,
-								rowIndex: currentData.length - 1,
-								columns: Object.keys(newRow)
-							});
-							vscode.window.showInformationMessage('Row added successfully');
-						}
+							if (success) {
+								await vscode.workspace.saveAll();
+								// Send new row data instead of refreshing entire page
+								panel.webview.postMessage({
+									command: 'rowAdded',
+									newRow: newRow,
+									rowIndex: currentData.length - 1,
+									columns: Object.keys(newRow)
+								});
+								vscode.window.showInformationMessage('Row added successfully');
+							}
 						}
 					} catch (error) {
 						vscode.window.showErrorMessage(`Failed to add row: ${error}`);
+					}
+					break;
+
+				case 'confirmDelete':
+					if (!documentUri) {
+						vscode.window.showWarningMessage('Cannot edit: This is a read-only view');
+						return;
+					}
+
+					const { rowIndex: confirmIndex } = message;
+					const result = await vscode.window.showWarningMessage(
+						`Are you sure you want to delete row ${confirmIndex + 1}?`,
+						{ modal: true },
+						'Delete'
+					);
+
+					if (result === 'Delete') {
+						panel.webview.postMessage({
+							command: 'proceedDelete',
+							rowIndex: confirmIndex
+						});
 					}
 					break;
 
@@ -178,15 +201,15 @@ function showJsonTable(context: vscode.ExtensionContext, jsonData: any, title: s
 							edit.replace(documentUri, fullRange, jsonString);
 							const success = await vscode.workspace.applyEdit(edit);
 
-						if (success) {
-							await vscode.workspace.saveAll();
-							// Send delete message instead of refreshing entire page
-							panel.webview.postMessage({
-								command: 'rowDeleted',
-								rowIndex: deleteIndex
-							});
-							vscode.window.showInformationMessage('Row deleted successfully');
-						}
+							if (success) {
+								await vscode.workspace.saveAll();
+								// Send delete message instead of refreshing entire page
+								panel.webview.postMessage({
+									command: 'rowDeleted',
+									rowIndex: deleteIndex
+								});
+								vscode.window.showInformationMessage('Row deleted successfully');
+							}
 						}
 					} catch (error) {
 						vscode.window.showErrorMessage(`Failed to delete row: ${error}`);
@@ -438,7 +461,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 		}
 
 		.editable-cell:hover::after {
-			content: '✏️';
+			content: '✍️';
 			position: absolute;
 			right: 5px;
 			top: 50%;
@@ -481,24 +504,25 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 		<div class="info">
 			<div class="info-item"><strong>Total Rows:</strong> <span id="totalRows">${tableData.length}</span></div>
 			<div class="info-item"><strong>Columns:</strong> <span id="totalColumns">${columns.length}</span></div>
-			${editable ? '<div class="info-item" style="color: var(--vscode-textLink-foreground);"><strong>✏️ Edit Mode:</strong> Click any cell to edit</div>' : '<div class="info-item" style="color: var(--vscode-debugConsole-warningForeground);"><strong>📖 Read-only Mode</strong></div>'}
+			${editable ? '<div class="info-item" style="color: var(--vscode-textLink-foreground);"><strong>✍️ Edit Mode:</strong> Click any cell to edit</div>' : '<div class="info-item" style="color: var(--vscode-debugConsole-warningForeground);"><strong>📖 Read-only Mode</strong></div>'}
 		</div>
 
 		<div class="search-container">
 			<input type="text" id="searchInput" placeholder="Search in table..." />
 			<button onclick="clearSearch()">Clear</button>
-			${editable ? '<button onclick="addRow()" class="add-btn">+ Add Row</button>' : ''}
+			${editable ? '<button id="addRowBtn" class="add-btn">+ Add Row</button>' : ''}
 		</div>
 
 		${tableHtml}
 	</div>
 
 	<script>
-		const vscode = acquireVsCodeApi();
+		(function() {
+			const vscode = acquireVsCodeApi();
 
-		// Search functionality
-		const searchInput = document.getElementById('searchInput');
-		let searchTimeout;
+			// Search functionality
+			const searchInput = document.getElementById('searchInput');
+			let searchTimeout;
 
 		searchInput.addEventListener('input', function() {
 			clearTimeout(searchTimeout);
@@ -524,9 +548,19 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			});
 		}
 
-		function clearSearch() {
+		window.clearSearch = function() {
 			searchInput.value = '';
 			performSearch('');
+		};
+
+		// Add row button event
+		const addRowBtn = document.getElementById('addRowBtn');
+		if (addRowBtn) {
+			addRowBtn.addEventListener('click', function() {
+				vscode.postMessage({
+					command: 'addRow'
+				});
+			});
 		}
 
 		// Toggle expandable content
@@ -576,10 +610,10 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 						columnKey: columnKey,
 						newValue: newValue
 					});
-					cell.textContent = newValue;
+					cell.innerHTML = formatCellValue(newValue);
 					cell.dataset.value = newValue;
 				} else {
-					cell.textContent = currentValue;
+					cell.innerHTML = formatCellValue(currentValue);
 				}
 				editingCell = null;
 			};
@@ -595,27 +629,42 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			});
 		}
 
-		function addRow() {
-			vscode.postMessage({
-				command: 'addRow'
-			});
-		}
+		// Event delegation for delete buttons to handle both static and dynamic rows
+		document.addEventListener('click', function(e) {
+			const target = e.target;
 
-		function deleteRow(rowIndex) {
-			if (confirm('Are you sure you want to delete this row?')) {
-				vscode.postMessage({
-					command: 'deleteRow',
-					rowIndex: rowIndex
-				});
+			// Handle delete button clicks
+			if (target && target.classList && target.classList.contains('delete-btn')) {
+				e.preventDefault();
+				e.stopPropagation();
+
+				const row = target.closest('tr');
+				if (row) {
+					const tbody = row.parentElement;
+					const rowIndex = Array.from(tbody.children).indexOf(row);
+
+					// Send confirmation request to extension
+					vscode.postMessage({
+						command: 'confirmDelete',
+						rowIndex: rowIndex
+					});
+				}
 			}
-		}
+		}, true);
+
+
 
 		// Listen for messages from extension
 		window.addEventListener('message', event => {
 			const message = event.data;
 			switch (message.command) {
 				case 'updateSuccess':
-					// Cell updated successfully
+					// Cell updated successfully - show brief notification
+					const notification = document.createElement('div');
+					notification.textContent = '✓ Saved';
+					notification.style.cssText = 'position:fixed;top:10px;right:10px;background:var(--vscode-notifications-background);color:var(--vscode-notifications-foreground);padding:8px 12px;border-radius:3px;box-shadow:0 2px 8px rgba(0,0,0,0.3);z-index:9999;';
+					document.body.appendChild(notification);
+					setTimeout(() => notification.remove(), 2000);
 					break;
 				case 'updateFailed':
 					alert('Failed to update cell. Please try again.');
@@ -625,6 +674,13 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 					break;
 				case 'rowDeleted':
 					handleRowDeleted(message.rowIndex);
+					break;
+				case 'proceedDelete':
+					// User confirmed deletion, send actual delete command
+					vscode.postMessage({
+						command: 'deleteRow',
+						rowIndex: message.rowIndex
+					});
 					break;
 			}
 		});
@@ -658,7 +714,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			const deleteButton = document.createElement('button');
 			deleteButton.className = 'delete-btn';
 			deleteButton.textContent = 'Delete';
-			deleteButton.onclick = function() { deleteRow(rowIndex); };
+			// No need to add event listener - handled by event delegation
 			actionsCell.appendChild(deleteButton);
 			tr.appendChild(actionsCell);
 
@@ -691,14 +747,8 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 						cell.dataset.row = idx;
 					});
 
-					// Update delete button
-					const deleteBtn = row.querySelector('.delete-btn');
-					if (deleteBtn) {
-						deleteBtn.onclick = function() { deleteRow(idx); };
-					}
-				});
-
-				// Update total rows
+					// Delete button handled by event delegation, no update needed
+				});				// Update total rows
 				const totalRowsSpan = document.getElementById('totalRows');
 				if (totalRowsSpan) {
 					totalRowsSpan.textContent = tbody.children.length;
@@ -724,6 +774,7 @@ function getWebviewContent(jsonData: any, editable: boolean = false): string {
 			div.textContent = text;
 			return div.innerHTML;
 		}
+		})();
 	</script>
 </body>
 </html>`;
@@ -761,7 +812,7 @@ function generateTableHtml(data: any[], columns: string[], editable: boolean = f
 		});
 
 		if (editable) {
-			html += `<td class="actions-column"><button class="delete-btn" onclick="deleteRow(${index})">Delete</button></td>`;
+			html += `<td class="actions-column"><button class="delete-btn">Delete</button></td>`;
 		}
 
 		html += '</tr>';
