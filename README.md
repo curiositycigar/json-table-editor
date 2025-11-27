@@ -1,16 +1,18 @@
-# JSON Table Viewer
+# Simple JSON Table Editor
 
-Simple JSON Table Editor is a lightweight VS Code extension that displays JSON data as an interactive table and adapts automatically to Light/Dark themes.
+Simple JSON Table Editor is a lightweight VS Code extension that lets you **view and edit** JSON data as an interactive table with automatic Light/Dark theme adaptation.
 
 ## Features
 
-- Table view for JSON arrays and objects
-- Automatic theme adaptation (Light/Dark) using VS Code theme variables
-- Inline editing of primitive values and JSON objects
-- Expandable nested objects and arrays with a modal table editor
-- Search and highlight matching cells
-- Type-aware coloring for numbers, strings, booleans, and null
-- Multiple activation methods: command palette, editor context menu, editor title
+- 📊 **View & Edit**: Display JSON as a table and edit values inline
+- ✏️ **Inline Editing**: Edit primitive values (numbers, strings, booleans, null) directly in cells
+- 🎯 **Nested Editing**: Edit nested objects and arrays using a modal table editor or textarea
+- 🎨 **Theme Adaptive**: Automatic Light/Dark theme support using VS Code theme variables
+- 🔍 **Search & Filter**: Real-time search with highlighting across all cells
+- 🌈 **Type-Aware Display**: Color-coded values by type (numbers, strings, booleans, null, objects)
+- ➕ **Add/Delete Rows**: Add new rows or delete existing ones with confirmation
+- 📦 **Expandable Objects**: Click icons to expand and edit nested JSON structures
+- 🚀 **Multiple Triggers**: Command palette, context menu, editor title bar, or selection
 
 ## Quick Start
 
@@ -52,9 +54,26 @@ Simple JSON Table Editor is a lightweight VS Code extension that displays JSON d
 
 ## Editing
 
-- Double-click (or click) a cell to edit. Primitive values (numbers, booleans, strings, null) are edited inline.
-- JSON objects/arrays open a textarea or a modal table editor for structured editing.
-- Edits are validated (JSON parsing) before saving back to the file.
+### Edit Cells
+- **Click any cell** to start editing
+- **Primitive values** (numbers, strings, booleans, null) are edited inline with an input field
+- **JSON objects/arrays** can be edited:
+  - As JSON text in a textarea (with validation)
+  - Or click the 📋/📊 icon to open a **modal table editor** for structured editing
+
+### Add/Delete Rows
+- Click **"Add Row"** button to insert a new row at the bottom
+- Click the **delete button** (🗑️) on any row to remove it (with confirmation dialog)
+
+### Nested Objects
+- Nested objects and arrays show preview text with an icon (📋 for arrays, 📊 for objects)
+- Click the icon to open a **modal popup** with the nested data displayed as an editable table
+- Edit values in the modal, click **Save** to apply changes
+
+### Auto-Save
+- All edits are **automatically saved** to the JSON file
+- **JSON validation** ensures malformed data is rejected
+- Type changes are reflected immediately (e.g., typing `false` displays as a boolean)
 
 ## Development
 

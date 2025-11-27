@@ -1,8 +1,8 @@
 {
   "name": "simple-json-table-editor",
   "displayName": "Simple JSON Table Editor",
-  "description": "View JSON data as interactive table with light/dark theme support",
-  "version": "0.0.1",
+  "description": "View and edit JSON data as interactive table with inline editing, nested object support, and automatic light/dark theme adaptation",
+  "version": "0.0.3",
   "publisher": "LucasYou",
   "repository": {
     "type": "git",
