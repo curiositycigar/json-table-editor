@@ -1,9 +1,23 @@
 # Change Log
 
-All notable changes to the "json-table-viewer" extension will be documented in this file.
+All notable changes to the "Simple JSON Table Editor" extension.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+## [0.0.4] - 2025-11-27
 
-## [Unreleased]
+### Changed
+- Optimized editing UI: overlay input mode prevents UI jumping
+- JSON objects/arrays now edit in modal popup with larger textarea
+
+### Added
+- Inline cell editing for all data types
+- Add/Delete row functionality
+- Nested object/array editing
+- Search and filter with highlighting
+- Type-aware value coloring
+- Auto-save and JSON validation
+
+## [0.0.1] - 2025-11-27
 
 - Initial release
+- View JSON as interactive table
+- Light/Dark theme support
